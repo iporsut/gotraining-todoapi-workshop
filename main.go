@@ -24,6 +24,56 @@ type TodoList struct {
 	Tasks []Task             `bson:"tasks" json:"tasks"`
 }
 
+func wrapError(coll *mongo.Collection, h func(context.Context, *gin.Context, *mongo.Collection) error) func(*gin.Context) {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		err := h(ctx, c, coll)
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				c.AbortWithError(http.StatusNotFound, err)
+			} else {
+				c.AbortWithError(http.StatusInternalServerError, err)
+			}
+		}
+	}
+}
+
+func newTodoList() *TodoList {
+	return &TodoList{
+		Tasks: []Task{},
+	}
+}
+
+func listTodoList(ctx context.Context, coll *mongo.Collection) ([]*TodoList, error) {
+	cur, err := coll.Find(ctx, bson.D{})
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+	var todos []*TodoList
+	for cur.Next(ctx) {
+		todo := newTodoList()
+		if err := cur.Decode(todo); err != nil {
+			return nil, err
+		}
+		todos = append(todos, todo)
+	}
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+	return todos, nil
+}
+
+func listTodoListHandler(ctx context.Context, c *gin.Context, coll *mongo.Collection) error {
+	todos, err := listTodoList(ctx, coll)
+	if err != nil {
+		return err
+	}
+
+	c.JSON(http.StatusOK, todos)
+	return nil
+}
+
 func main() {
 	ctx := context.Background()
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://usko7imkex32llnhtmyz:AvsbbVN7Dzo9jp58pPoT@bazk4bps4tqprxp-mongodb.services.clever-cloud.com:27017/bazk4bps4tqprxp"))
@@ -37,31 +87,7 @@ func main() {
 	}
 	coll := client.Database("bazk4bps4tqprxp").Collection("todos")
 	r := gin.Default()
-	r.GET("/todos", func(c *gin.Context) {
-		ctx := c.Request.Context()
-		cur, err := coll.Find(ctx, bson.D{})
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-		defer cur.Close(ctx)
-		var todos []TodoList
-		for cur.Next(ctx) {
-			todo := TodoList{
-				Tasks: []Task{},
-			}
-			if err := cur.Decode(&todo); err != nil {
-				c.AbortWithError(http.StatusInternalServerError, err)
-				return
-			}
-			todos = append(todos, todo)
-		}
-		if err := cur.Err(); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-		c.JSON(http.StatusOK, todos)
-	})
+	r.GET("/todos", wrapError(coll, listTodoListHandler))
 
 	r.POST("/todos", func(c *gin.Context) {
 		ctx := c.Request.Context()
