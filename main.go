@@ -50,7 +50,7 @@ func listTodoList(ctx context.Context, coll *mongo.Collection) ([]*TodoList, err
 		return nil, err
 	}
 	defer cur.Close(ctx)
-	var todos []*TodoList
+	todos := []*TodoList{}
 	for cur.Next(ctx) {
 		todo := newTodoList()
 		if err := cur.Decode(todo); err != nil {
@@ -76,7 +76,7 @@ func listTodoListHandler(ctx context.Context, c *gin.Context, coll *mongo.Collec
 
 func main() {
 	ctx := context.Background()
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://usko7imkex32llnhtmyz:AvsbbVN7Dzo9jp58pPoT@bazk4bps4tqprxp-mongodb.services.clever-cloud.com:27017/bazk4bps4tqprxp"))
+	client, err := mongo.Connect(ctx, options.Client())
 	if err != nil {
 		log.Println(err)
 		os.Exit(1)
@@ -153,6 +153,45 @@ func main() {
 		}
 		if result.DeletedCount == 0 {
 			c.Status(http.StatusNotFound)
+			return
+		}
+	})
+
+	r.POST("/todos/:id/tasks", func(c *gin.Context) {
+		id, _ := primitive.ObjectIDFromHex(c.Param("id"))
+		var t Task
+		if err := c.Bind(&t); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+		if _, err := coll.UpdateOne(
+			c.Request.Context(),
+			bson.D{{"_id", id}},
+			bson.D{{"$push",
+				bson.D{{"tasks", t}},
+			}},
+		); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+	})
+
+	r.PUT("/todos/:id/tasks/:task_id", func(c *gin.Context) {
+		id, _ := primitive.ObjectIDFromHex(c.Param("id"))
+		var t struct {
+			Done bool `json:"done"`
+		}
+
+		if err := c.Bind(&t); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+		if _, err := coll.UpdateOne(
+			c.Request.Context(),
+			bson.D{{"_id", id}},
+			bson.D{{"$set", bson.D{{"tasks." + c.Param("task_id") + ".done", t.Done}}}},
+		); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
 	})
