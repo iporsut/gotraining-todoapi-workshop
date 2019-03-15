@@ -76,7 +76,7 @@ func listTodoListHandler(ctx context.Context, c *gin.Context, coll *mongo.Collec
 
 func main() {
 	ctx := context.Background()
-	client, err := mongo.Connect(ctx, options.Client())
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://db:27017"))
 	if err != nil {
 		log.Println(err)
 		os.Exit(1)

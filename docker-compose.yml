@@ -1,0 +1,13 @@
+version: "3"
+
+services:
+  todoapi:
+    build: .
+    ports:
+      - 8000:8000
+  db:
+    image: mongo:latest
+    volumes:
+      - ./mongodb:/data/db
+    ports:
+      - 27017:27017
