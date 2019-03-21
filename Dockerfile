@@ -1,7 +1,13 @@
 FROM golang:1.12 AS builder
 WORKDIR /app
+
+COPY go.mod .
+COPY go.sum .
+
+RUN go mod download
+
 COPY . .
-RUN go mod tidy
+
 RUN GOARCH=amd64 GOOS=linux go build -o todo-api
 
 FROM ubuntu
